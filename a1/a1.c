@@ -60,7 +60,9 @@ void printDirectory(char *path, bool recursive, char *startsWith, bool hasPermEx
         // check if has_perm_exec
         char fullPath[MAX_PATH_LENGTH];
         snprintf(fullPath, sizeof(fullPath), "%s/%s", path, entry->d_name);
-        lstat(fullPath, &inode);
+
+        if (lstat(fullPath, &inode) != 0)
+            continue;
 
         // ignore . and .. directories
         if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0)
@@ -122,16 +124,18 @@ void handleList(int argc, char *argv[])
     printDirectory(path, isRecursive, startsWith, hasPermExecute);
 }
 
-void handleParse(int argc, char *argv[])
+bool handleParse(int argc, char *argv[], bool okToPrint)
 {
     char *path = NULL;
-    if (strncmp(argv[2], "path=", 5) == 0)
-        path = argv[2] + 5;
+    for (int i = 2; i < argc; i++)
+    {
+        if (strncmp(argv[i], "path=", 5) == 0)
+            path = argv[i] + 5;
+    }
 
     if (path == NULL)
     {
-        printf("ERROR\ninvalid file path\n");
-        return;
+        return false;
     }
 
     short int version = 0;
@@ -141,30 +145,35 @@ void handleParse(int argc, char *argv[])
     int fd = open(path, O_RDONLY);
     if (fd < 0)
     {
-        printf("ERROR\ninvalid file path\n");
-        return;
+        return false;
     }
 
     if (read(fd, magic, MAGIC_SIZE) < MAGIC_SIZE || strncmp(magic, MAGIC, MAGIC_SIZE) != 0)
     {
-        printf("ERROR\nwrong magic\n");
-        return;
+        if (okToPrint)
+            printf("ERROR\nwrong magic\n");
+        close(fd);
+        return false;
     }
 
     lseek(fd, 2, SEEK_CUR); // skip the header
     if (read(fd, &version, VERSION_SIZE) < VERSION_SIZE || version < VERSION_MIN || version > VERSION_MAX)
     {
-        printf("ERROR\nwrong version\n");
-        return;
+        if (okToPrint)
+            printf("ERROR\nwrong version\n");
+        close(fd);
+        return false;
     }
 
     if (read(fd, &noOfSections, NO_OF_SECTIONS_SIZE) < NO_OF_SECTIONS_SIZE || (noOfSections != ACCEPTED_NO_OF_SECTIONS && (noOfSections < NO_OF_SECTIONS_MIN || noOfSections > NO_OF_SECTIONS_MAX)))
     {
-        printf("ERROR\nwrong sect_nr\n");
-        return;
+        if (okToPrint)
+            printf("ERROR\nwrong sect_nr\n");
+        close(fd);
+        return false;
     }
 
-    char result[(NO_OF_SECTIONS_MAX + 1) * (SECTION_HEADERS_SIZE + 12)];
+    char result[5000] = "";
 
     strcat(result, "version=");
 
@@ -197,9 +206,11 @@ void handleParse(int argc, char *argv[])
 
         if (sectType != SECT_TYPE_70 && sectType != SECT_TYPE_64 && sectType != SECT_TYPE_77 && sectType != SECT_TYPE_93)
         {
-            printf("ERROR\nwrong sect_types\n");
+            if (okToPrint)
+                printf("ERROR\nwrong sect_types\n");
             success = false;
-            return;
+            close(fd);
+            return false;
         }
         else
         {
@@ -219,14 +230,112 @@ void handleParse(int argc, char *argv[])
     }
 
     if (success)
-        printf("SUCCESS\n%s", result);
+    {
+        if (okToPrint)
+            printf("SUCCESS\n%s", result);
+        close(fd);
+        return true;
+    }
 
     close(fd);
+    return false;
 }
 
 void handleExtract(int argc, char *argv[])
 {
-    printf("extract\n");
+    char *path = NULL;
+    int sectionNr = 0;
+    int lineNr = 0;
+
+    for (int i = 2; i < argc; i++)
+    {
+        if (strncmp(argv[i], "path=", 5) == 0)
+            path = argv[i] + 5;
+        else if (strncmp(argv[i], "section=", 8) == 0)
+            sectionNr = atoi(argv[i] + 8);
+        else if (strncmp(argv[i], "line=", 5) == 0)
+            lineNr = atoi(argv[i] + 5);
+    }
+
+    if (path == NULL)
+    {
+        printf("ERROR\ninvalid file\n");
+        return;
+    }
+
+    int fd = open(path, O_RDONLY);
+    if (fd < 0)
+    {
+        printf("ERROR\ninvalid file\n");
+        return;
+    }
+
+    if (!handleParse(argc, argv, false))
+    {
+        printf("ERROR\ninvalid file\n");
+        close(fd);
+        return;
+    }
+
+    char noOfSections = 0;
+
+    lseek(fd, MAGIC_SIZE + HEADER_SIZE + VERSION_SIZE, SEEK_SET);
+    read(fd, &noOfSections, NO_OF_SECTIONS_SIZE);
+
+    if (sectionNr < 1 || sectionNr > noOfSections)
+    {
+        printf("ERROR\ninvalid section\n");
+        close(fd);
+        return;
+    }
+
+    if (lineNr < 1)
+    {
+        printf("ERROR\ninvalid line\n");
+        close(fd);
+        return;
+    }
+
+    int sectOffset, sectSize;
+
+    lseek(fd, MAGIC_SIZE + HEADER_SIZE + VERSION_SIZE + NO_OF_SECTIONS_SIZE + (sectionNr - 1) * SECTION_HEADERS_SIZE + SECT_NAME_SIZE + SECT_TYPE_SIZE, SEEK_SET); // skip name and type
+
+    // lseek(fd, SECT_NAME_SIZE + SECT_TYPE_SIZE , SEEK_CUR); // skip the name and type
+    read(fd, &sectOffset, SECT_OFFSET_SIZE);
+    read(fd, &sectSize, SECT_SIZE_SIZE);
+
+    char *sectionContent = malloc(sectSize + 1);
+    if (sectionContent == NULL)
+    {
+        close(fd);
+        return;
+    }
+
+    lseek(fd, sectOffset, SEEK_SET);
+    read(fd, sectionContent, sectSize);
+    sectionContent[sectSize] = '\0';
+
+    char *line = strtok(sectionContent, "\n");
+    int currentLine = 1;
+    bool foundLine = false;
+
+    while (line != NULL)
+    {
+        if (currentLine == lineNr)
+        {
+            printf("SUCCESS\n%s\n", line);
+            foundLine = true;
+            break;
+        }
+        line = strtok(NULL, "\n");
+        currentLine++;
+    }
+
+    if (!foundLine)
+        printf("ERROR\ninvalid line\n");
+
+    free(sectionContent);
+    close(fd);
 }
 
 void handleFindAll(int argc, char *argv[])
@@ -236,7 +345,6 @@ void handleFindAll(int argc, char *argv[])
 
 int main(int argc, char *argv[])
 {
-
     // list, parse, extract, findall
     if (argc >= 2)
     {
@@ -250,7 +358,7 @@ int main(int argc, char *argv[])
         }
         else if (strcmp(argv[1], "parse") == 0)
         {
-            handleParse(argc, argv);
+            handleParse(argc, argv, true);
         }
         else if (strcmp(argv[1], "extract") == 0)
         {
