@@ -33,8 +33,9 @@
 #define ACCEPTED_NO_OF_SECTIONS 2
 #define NO_OF_SECTIONS_MIN 4
 #define NO_OF_SECTIONS_MAX 16
+#define REQUIRED_NO_OF_SECTIONS_93 2
 
-#define MAX_PATH_LENGTH 1024
+#define MAX_PATH_LENGTH 4096
 
 #define VARIANT 33968
 
@@ -338,9 +339,117 @@ void handleExtract(int argc, char *argv[])
     close(fd);
 }
 
+void printDirectory2(char *path)
+{
+    DIR *dir = opendir(path);
+    if (dir == NULL)
+        return;
+
+    struct dirent *entry;
+    struct stat inode;
+
+    while ((entry = readdir(dir)) != NULL)
+    {
+        if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0)
+            continue;
+
+        char fullPath[MAX_PATH_LENGTH];
+        snprintf(fullPath, MAX_PATH_LENGTH, "%s/%s", path, entry->d_name);
+
+        if (lstat(fullPath, &inode) != 0)
+            continue;
+
+        if (S_ISREG(inode.st_mode))
+        {
+            int fd = open(fullPath, O_RDONLY);
+            if (fd < 0)
+                continue;
+
+            char magic[MAGIC_SIZE];
+            short version;
+            char noOfSections;
+
+            if (read(fd, magic, MAGIC_SIZE) < MAGIC_SIZE || strncmp(magic, MAGIC, MAGIC_SIZE) != 0)
+            {
+                close(fd);
+                continue;
+            }
+
+            lseek(fd, 2, SEEK_CUR);
+
+            if (read(fd, &version, VERSION_SIZE) < VERSION_SIZE || version < VERSION_MIN || version > VERSION_MAX)
+            {
+                close(fd);
+                continue;
+            }
+
+            if (read(fd, &noOfSections, NO_OF_SECTIONS_SIZE) < NO_OF_SECTIONS_SIZE ||
+                (noOfSections != ACCEPTED_NO_OF_SECTIONS &&
+                 (noOfSections < NO_OF_SECTIONS_MIN || noOfSections > NO_OF_SECTIONS_MAX)))
+            {
+                close(fd);
+                continue;
+            }
+
+            int count = 0;
+
+            for (int section = 0; section < noOfSections; section++)
+            {
+                short sectType;
+
+                lseek(fd, MAGIC_SIZE + HEADER_SIZE + VERSION_SIZE + NO_OF_SECTIONS_SIZE + section * SECTION_HEADERS_SIZE + SECT_NAME_SIZE, SEEK_SET);
+
+                read(fd, &sectType, SECT_TYPE_SIZE);
+
+                if (sectType == SECT_TYPE_93)
+                    count++;
+
+                if (sectType != SECT_TYPE_70 && sectType != SECT_TYPE_64 && sectType != SECT_TYPE_77 && sectType != SECT_TYPE_93)
+                {
+                    count = 0;
+                    break;
+                }
+            }
+
+            if (count >= REQUIRED_NO_OF_SECTIONS_93)
+                printf("%s\n", fullPath);
+
+            close(fd);
+        }
+
+        if (S_ISDIR(inode.st_mode))
+            printDirectory2(fullPath);
+    }
+
+    closedir(dir);
+}
+
 void handleFindAll(int argc, char *argv[])
 {
-    printf("findall\n");
+    char *path = NULL;
+
+    for (int i = 2; i < argc; i++)
+    {
+        if (strncmp(argv[i], "path=", 5) == 0)
+            path = argv[i] + 5;
+    }
+
+    if (path == NULL)
+    {
+        printf("ERROR\ninvalid directory path\n");
+        return;
+    }
+
+    DIR *dir = opendir(path);
+    if (dir == NULL)
+    {
+        printf("ERROR\ninvalid directory path\n");
+        return;
+    }
+    closedir(dir);
+
+    printf("SUCCESS\n");
+    printDirectory2(path);
 }
 
 int main(int argc, char *argv[])
