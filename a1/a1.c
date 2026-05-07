@@ -57,7 +57,6 @@ void print_directory(char *path, bool recursive, char *starts_with,
 
         bool ok_to_print = true;
 
-        // check if has_perm_exec
         char full_path[MAX_PATH_LENGTH];
         snprintf(full_path, sizeof(full_path), "%s/%s", path, entry->d_name);
 
