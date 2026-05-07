@@ -355,6 +355,7 @@ void handle_extract(int argc, char *argv[])
 
     free(section_content);
     close(fd);
+    return false;
 }
 
 void print_directory_2(char *path)
