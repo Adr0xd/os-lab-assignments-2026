@@ -12,6 +12,10 @@ sem_t s_p5t4_start, s_p5t3_end;
 
 sem_t *s_p5t1_end, *s_p4t3_end;
 
+sem_t s_p2_6max;
+pthread_mutex_t p2_mutex;
+int active = 0;
+
 void *p5_thread_routine(void *arg)
 {
 
@@ -73,8 +77,12 @@ void *p2_thread_routine(void *arg)
 {
     // int tid = *(int *)arg;
     int tid = *(int *)arg;
+    sem_wait(&s_p2_6max);
     info(BEGIN, 2, tid);
+
     info(END, 2, tid);
+
+    sem_post(&s_p2_6max);
     return NULL;
 }
 
@@ -88,6 +96,8 @@ void create_process2_threads()
         tids[sh] = sh + 1;
     }
 
+    sem_init(&s_p2_6max, 0, 6);
+
     for (int tz = 0; tz < 39; tz++)
     {
         pthread_create(&p2_threads[tz], NULL, p2_thread_routine, &tids[tz]);
@@ -97,6 +107,8 @@ void create_process2_threads()
     {
         pthread_join(p2_threads[tz], NULL);
     }
+
+    sem_destroy(&s_p2_6max);
 }
 
 void *p4_thread_routine(void *arg)
