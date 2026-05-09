@@ -72,6 +72,9 @@ void create_process5_threads()
 void *p2_thread_routine(void *arg)
 {
     // int tid = *(int *)arg;
+    int tid = *(int *)arg;
+    info(BEGIN, 2, tid);
+    info(END, 2, tid);
     return NULL;
 }
 
