@@ -5,9 +5,12 @@
 #include <sys/wait.h>
 #include <pthread.h>
 #include <semaphore.h>
+#include <fcntl.h>
 #include "a2_helper.h"
 
 sem_t s_p5t4_start, s_p5t3_end;
+
+sem_t *s_p5t1_end, *s_p4t3_end;
 
 void *p5_thread_routine(void *arg)
 {
@@ -27,6 +30,13 @@ void *p5_thread_routine(void *arg)
         sem_post(&s_p5t4_start);
         sem_wait(&s_p5t3_end);
         info(END, 5, 4);
+    }
+    else if (tid == 1)
+    {
+        sem_wait(s_p4t3_end);
+        info(BEGIN, 5, 1);
+        info(END, 5, 1);
+        sem_post(s_p5t1_end);
     }
     else
     {
@@ -59,6 +69,80 @@ void create_process5_threads()
     sem_destroy(&s_p5t3_end);
 }
 
+void *p2_thread_routine(void *arg)
+{
+    // int tid = *(int *)arg;
+    return NULL;
+}
+
+void create_process2_threads()
+{
+
+    pthread_t p2_threads[39];
+    int tids[39];
+    for (int sh = 0; sh < 39; sh++)
+    {
+        tids[sh] = sh + 1;
+    }
+
+    for (int tz = 0; tz < 39; tz++)
+    {
+        pthread_create(&p2_threads[tz], NULL, p2_thread_routine, &tids[tz]);
+    }
+
+    for (int tz = 0; tz < 39; tz++)
+    {
+        pthread_join(p2_threads[tz], NULL);
+    }
+}
+
+void *p4_thread_routine(void *arg)
+{
+
+    int tid = *(int *)arg;
+
+    if (tid == 3)
+    {
+        info(BEGIN, 4, 3);
+        info(END, 4, 3);
+        sem_post(s_p4t3_end);
+    }
+    else if (tid == 5)
+    {
+        sem_wait(s_p5t1_end);
+        info(BEGIN, 4, 5);
+        info(END, 4, 5);
+    }
+    else
+    {
+        info(BEGIN, 4, tid);
+        info(END, 4, tid);
+    }
+
+    return NULL;
+}
+
+void create_process4_threads()
+{
+
+    pthread_t p4_threads[6];
+    int tids[6];
+    for (int sh = 0; sh < 6; sh++)
+    {
+        tids[sh] = sh + 1;
+    }
+
+    for (int tz = 0; tz < 6; tz++)
+    {
+        pthread_create(&p4_threads[tz], NULL, p4_thread_routine, &tids[tz]);
+    }
+
+    for (int tz = 0; tz < 6; tz++)
+    {
+        pthread_join(p4_threads[tz], NULL);
+    }
+}
+
 void create_processes()
 {
     pid_t p2, p3, p4, p5, p6, p7, p8, p9;
@@ -87,6 +171,8 @@ void create_processes()
             exit(0);
         }
 
+        create_process2_threads();
+
         wait(NULL);
         info(END, 2, 0);
         exit(0);
@@ -102,6 +188,9 @@ void create_processes()
         if (p4 == 0)
         {
             info(BEGIN, 4, 0);
+
+            create_process4_threads();
+
             info(END, 4, 0);
             exit(0);
         }
@@ -163,6 +252,12 @@ void create_processes()
 // gcc -Wall a2.c a2_helper.c -o a2 -pthread -lrt
 int main()
 {
+    sem_unlink("/s_p4t3_end");
+    sem_unlink("/s_p5t1_end");
+
+    s_p5t1_end = sem_open("/s_p5t1_end", O_CREAT, 0644, 0);
+    s_p4t3_end = sem_open("/s_p4t3_end", O_CREAT, 0644, 0);
+
     init();
 
     info(BEGIN, 1, 0);
@@ -170,5 +265,12 @@ int main()
     create_processes();
 
     info(END, 1, 0);
+
+    sem_close(s_p4t3_end);
+    sem_close(s_p5t1_end);
+
+    sem_unlink("/s_p4t3_end");
+    sem_unlink("/s_p5t1_end");
+
     return 0;
 }
