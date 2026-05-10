@@ -13,7 +13,7 @@ sem_t s_p5t4_start, s_p5t3_end;
 sem_t *s_p5t1_end, *s_p4t3_end;
 
 sem_t s_p2_6max;
-pthread_mutex_t p2t13_mutex;
+pthread_mutex_t p2_mutex;
 int active = 0;
 pthread_cond_t p2t13_cond;
 
@@ -81,59 +81,59 @@ void *p2_thread_routine(void *arg)
     int tid = *(int *)arg;
     sem_wait(&s_p2_6max);
 
-    pthread_mutex_lock(&p2t13_mutex);
+    pthread_mutex_lock(&p2_mutex);
 
     active++;
     if (tid == 13)
         t13_start = 1;
     pthread_cond_broadcast(&p2t13_cond);
 
-    pthread_mutex_unlock(&p2t13_mutex);
+    pthread_mutex_unlock(&p2_mutex);
 
     info(BEGIN, 2, tid);
 
     if (tid == 13)
     {
-        pthread_mutex_lock(&p2t13_mutex);
+        pthread_mutex_lock(&p2_mutex);
 
         while (active != 6)
         {
-            pthread_cond_wait(&p2t13_cond, &p2t13_mutex);
+            pthread_cond_wait(&p2t13_cond, &p2_mutex);
         }
         pthread_cond_broadcast(&p2t13_cond);
 
-        pthread_mutex_unlock(&p2t13_mutex);
+        pthread_mutex_unlock(&p2_mutex);
     }
     else
     {
-        pthread_mutex_lock(&p2t13_mutex);
+        pthread_mutex_lock(&p2_mutex);
 
         while (t13_start == 1 && t13_end == 0)
         {
             // if 13 has started but not yet finished
             // make the other ones wait until 13 ends
-            pthread_cond_wait(&p2t13_cond, &p2t13_mutex);
+            pthread_cond_wait(&p2t13_cond, &p2_mutex);
         }
 
-        pthread_mutex_unlock(&p2t13_mutex);
+        pthread_mutex_unlock(&p2_mutex);
     }
 
     info(END, 2, tid);
 
     if (tid == 13)
     {
-        pthread_mutex_lock(&p2t13_mutex);
+        pthread_mutex_lock(&p2_mutex);
         t13_end = 1;
         pthread_cond_broadcast(&p2t13_cond);
-        pthread_mutex_unlock(&p2t13_mutex);
+        pthread_mutex_unlock(&p2_mutex);
     }
 
-    pthread_mutex_lock(&p2t13_mutex);
+    pthread_mutex_lock(&p2_mutex);
 
     active--;
     pthread_cond_broadcast(&p2t13_cond);
 
-    pthread_mutex_unlock(&p2t13_mutex);
+    pthread_mutex_unlock(&p2_mutex);
 
     sem_post(&s_p2_6max);
     return NULL;
@@ -150,7 +150,7 @@ void create_process2_threads()
     }
 
     sem_init(&s_p2_6max, 0, 6);
-    pthread_mutex_init(&p2t13_mutex, NULL);
+    pthread_mutex_init(&p2_mutex, NULL);
     pthread_cond_init(&p2t13_cond, NULL);
 
     t13_start = t13_end = active = 0;
@@ -166,7 +166,7 @@ void create_process2_threads()
     }
 
     sem_destroy(&s_p2_6max);
-    pthread_mutex_destroy(&p2t13_mutex);
+    pthread_mutex_destroy(&p2_mutex);
     pthread_cond_destroy(&p2t13_cond);
 }
 
