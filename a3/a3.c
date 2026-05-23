@@ -242,7 +242,6 @@ int main()
         {
             uint offset = read_number(fd_request);
             uint value = read_number(fd_request);
-
             write_string(fd_response, "WRITE_TO_SHM");
 
             if (shm_ptr != NULL && offset <= shm_size - sizeof(uint))
@@ -263,6 +262,23 @@ int main()
 
             if (map_file(file_name))
                 write_string(fd_response, "SUCCESS");
+            else
+                write_string(fd_response, "ERROR");
+        }
+        else if (strcmp(request, "READ_FROM_FILE_OFFSET") == 0)
+        {
+            uint offset = read_number(fd_request);
+            uint no_of_bytes = read_number(fd_request);
+
+            write_string(fd_response, "READ_FROM_FILE_OFFSET");
+
+            if (shm_ptr != NULL && file_ptr != NULL &&
+                no_of_bytes <= shm_size && offset <= file_size &&
+                no_of_bytes <= file_size - offset)
+            {
+                memcpy(shm_ptr, file_ptr + offset, no_of_bytes);
+                write_string(fd_response, "SUCCESS");
+            }
             else
                 write_string(fd_response, "ERROR");
         }
