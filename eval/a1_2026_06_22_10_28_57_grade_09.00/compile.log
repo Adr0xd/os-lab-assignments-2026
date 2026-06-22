@@ -1,0 +1,7 @@
+a1.c: In function 'handle_extract':
+a1.c:358:12: warning: 'return' with a value, in function returning void [-Wreturn-type]
+  358 |     return false;
+      |            ^~~~~
+a1.c:258:6: note: declared here
+  258 | void handle_extract(int argc, char *argv[])
+      |      ^~~~~~~~~~~~~~
